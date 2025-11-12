@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lucky Committee — Admin</title>
+  <link href="https://fonts.cdnfonts.com/css/jameel-noori-nastaleeq" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{--orange:#ff7a00;--bg:#fff7f0;--card:#fff}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter, Arial, sans-serif;background:linear-gradient(180deg,var(--bg),#fff);color:#111;padding:18px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(90deg,var(--orange),#ff9b3a);color:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.12)}
+    .container{max-width:1150px;margin:18px auto;display:grid;grid-template-columns:1fr 360px;gap:18px}
+    @media(max-width:980px){.container{grid-template-columns:1fr;padding:0 8px}}
+    .panel{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,0.06)}
+    h2{margin:0}
+    label{display:block;margin-top:8px;font-weight:700}
+    input,select,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #eee}
+    .btn{background:var(--orange);color:#fff;padding:10px;border-radius:10px;border:none;font-weight:800;cursor:pointer}
+    .small{font-size:13px;color:#666}
+    .list{max-height:320px;overflow:auto;margin-top:10px}
+    .participant{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;border:1px solid #f4f4f4;margin-bottom:8px}
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:150}
+  </style>
+</head>
+<body>
+  <script>const API_BASE = ''; /* replace with backend URL when ready */</script>
+
+  <div class="topbar">
+    <div style="display:flex;gap:12px;align-items:center">
+      <div style="width:56px;height:56px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--orange);font-weight:900">LC</div>
+      <div><div style="font-weight:900">Lucky Committee — Admin</div><div class="small">Manage draws & participants</div></div>
+    </div>
+    <div>
+      <button class="btn" onclick="openNew()">+ New Draw</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <main>
+      <div class="panel">
+        <h2>Draws</h2>
+        <div id="drawsArea"></div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <h2>Participants</h2>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input id="p_name" placeholder="Name"><input id="p_phone" placeholder="Phone"><select id="p_draw"></select>
+          <button class="btn" onclick="addPart()">Add</button>
+        </div>
+        <div class="list" id="partsList"></div>
+      </div>
+    </main>
+
+    <aside>
+      <div class="panel">
+        <h3>Payment Methods</h3>
+        <div id="paymentsBox"></div>
+        <label>Provider</label><input id="pm_name" placeholder="EasyPaisa">
+        <label>Value</label><input id="pm_val" placeholder="0300-xxxxxxx">
+        <button class="btn" style="margin-top:8px" onclick="addPM()">Add</button>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <h3>Quick Actions</h3>
+        <button class="btn" onclick="pickWinner()">Pick Winner</button>
+        <div style="margin-top:8px" class="small">Seed (optional)</div>
+        <input id="seed" placeholder="seed for reproducibility">
+      </div>
+    </aside>
+  </div>
+
+  <!-- New draw modal -->
+  <div id="modal" class="modal">
+    <div style="background:#fff;padding:16px;border-radius:12px;width:92%;max-width:520px">
+      <h3 id="modalTitle">New Draw</h3>
+      <label>Title</label><input id="d_title">
+      <label>Price (PKR)</label><input id="d_price" type="number">
+      <label>Datetime</label><input id="d_dt" type="datetime-local">
+      <label>Description</label><textarea id="d_desc"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+        <button class="btn" onclick="saveDraw()">Save</button>
+        <button class="btn" style="background:#eee;color:#111" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Admin demo logic (works offline or with API when API_BASE set) */
+const API = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+let draws = [], parts = [], payments = [];
+
+async function load(){
+  if(!API) return loadDemo();
+  try{
+    const [dr, pr, pm] = await Promise.all([fetch(API+'/api/draws'), fetch(API+'/api/participants'), fetch(API+'/api/payments')]);
+    draws = await dr.json(); parts = await pr.json(); payments = await pm.json();
+  }catch(e){ console.warn('API fail', e); loadDemo(); }
+  render();
+}
+
+function loadDemo(){
+  draws = [{id:'d1',title:'100 PKR Committee',price:100,datetime:new Date(Date.now()+2*86400000).toISOString(),description:'Demo draw',status:'active'}];
+  parts = [{id:'p1',name:'Ali',phone:'03001234567',draw_id:'d1',method:'EasyPaisa',status:'confirmed'}];
+  payments = [{id:'pm1',provider:'EasyPaisa',value:'0300-XXXXX'}];
+  render();
+}
+
+function render(){
+  const drawsArea = document.getElementById('drawsArea'); drawsArea.innerHTML='';
+  draws.forEach(d=>{
+    const div = document.createElement('div'); div.className='panel'; div.style.marginBottom='10px';
+    div.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+      <div><strong>${escape(d.title)}</strong><div class="small">${escape(d.description||'')}</div></div>
+      <div style="text-align:right">
+        <div class="small">${d.price} PKR</div>
+        <div class="small">${d.datetime? new Date(d.datetime).toLocaleString() : '-'}</div>
+        <div style="margin-top:8px"><button class="btn" onclick="openEdit('${d.id}')">Edit</button> <button class="btn" style="background:#eee;color:#111" onclick="delDraw('${d.id}')">Delete</button></div>
+      </div>
+    </div>`;
+    drawsArea.appendChild(div);
+  });
+
+  const sel = document.getElementById('p_draw'); sel.innerHTML='';
+  draws.forEach(d=> sel.insertAdjacentHTML('beforeend', <option value="${d.id}">${escape(d.title)}</option>));
+
+  const partsList = document.getElementById('partsList'); partsList.innerHTML='';
+  parts.forEach(p=>{
+    const el = document.createElement('div'); el.className='participant';
+    el.innerHTML = `<div><strong>${escape(p.name)}</strong><div class="small">${escape(p.phone)} • ${getDrawTitle(p.draw_id)}</div></div>
+      <div><button class="btn" onclick="confirmPart('${p.id}')">${p.status==='confirmed'?'Confirmed':'Mark Paid'}</button> <button class="btn" style="background:#eee;color:#111" onclick="removePart('${p.id}')">Remove</button></div>`;
+    partsList.appendChild(el);
+  });
+
+  const pmBox = document.getElementById('paymentsBox'); pmBox.innerHTML='';
+  payments.forEach(pm=> pmBox.insertAdjacentHTML('beforeend', <div style="padding:8px;border-bottom:1px solid #f4f4f4"><strong>${escape(pm.provider)}</strong><div class="small">${escape(pm.value)}</div></div>));
+}
+
+function escape(s){ return s ? String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','':'&#96;'}[c])) : ''; }
+function getDrawTitle(id){ const d = draws.find(x=>x.id===id); return d? d.title : '-'; }
+
+function openNew(){ document.getElementById('modal').style.display='flex'; document.getElementById('modalTitle').innerText='New Draw'; document.getElementById('d_title').value=''; document.getElementById('d_price').value=''; document.getElementById('d_dt').value=''; document.getElementById('d_desc').value=''; }
+function closeModal(){ document.getElementById('modal').style.display='none'; }
+function openEdit(id){ const d = draws.find(x=>x.id===id); if(!d) return; document.getElementById('modal').style.display='flex'; document.getElementById('modalTitle').innerText='Edit Draw'; document.getElementById('d_title').value=d.title; document.getElementById('d_price').value=d.price; document.getElementById('d_dt').value=d.datetime ? new Date(d.datetime).toISOString().slice(0,16) : ''; document.getElementById('d_desc').value=d.description||''; document.getElementById('modal').dataset.edit = id; }
+function saveDraw(){
+  const title = document.getElementById('d_title').value.trim(); const price = parseInt(document.getElementById('d_price').value) || 0; const dt = document.getElementById('d_dt').value; const desc = document.getElementById('d_desc').value.trim();
+  if(!title || !dt) return alert('Enter title and datetime');
+  if(document.getElementById('modal').dataset.edit){
+    const id = document.getElementById('modal').dataset.edit; const idx = draws.findIndex(x=>x.id===id); if(idx>-1){ draws[idx] = {...draws[idx], title, price, datetime:dt, description:desc}; delete document.getElementById('modal').dataset.edit; }
+  } else draws.push({ id: 'd'+Math.random().toString(36).slice(2,9), title, price, datetime:dt, description:desc, status:'active' });
+  closeModal(); render(); if(API) syncServerDraws();
+}
+
+function delDraw(id){ if(!confirm('Delete draw?')) return; draws = draws.filter(x=>x.id!==id); parts = parts.filter(p=>p.draw_id!==id); render(); if(API) syncServerDraws(); }
+
+function addPart(){ const n=document.getElementById('p_name').value.trim(); const ph=document.getElementById('p_phone').value.trim(); const d=document.getElementById('p_draw').value; if(!n||!ph||!d) return alert('Fill fields'); parts.push({ id:'p'+Math.random().toString(36).slice(2,9), name:n, phone:ph, draw_id:d, method:'', status:'pending' }); document.getElementById('p_name').value=''; document.getElementById('p_phone').value=''; render(); if(API) syncServerParts(); }
+function confirmPart(id){ const p = parts.find(x=>x.id===id); if(!p) return; p.status = (p.status==='confirmed') ? 'pending' : 'confirmed'; render(); if(API) syncServerParts(); }
+function removePart(id){ if(!confirm('Remove?')) return; parts = parts.filter(x=>x.id!==id); render(); if(API) syncServerParts(); }
+
+function addPM(){ const name=document.getElementById('pm_name').value.trim(); const val=document.getElementById('pm_val').value.trim(); if(!name||!val) return alert('Fill'); payments.push({ id:'pm'+Math.random().toString(36).slice(2,9), provider:name, value:val }); document.getElementById('pm_name').value=''; document.getElementById('pm_val').value=''; render(); if(API) syncServerPM(); }
+
+function pickWinner(){
+  const seed = document.getElementById('seed').value.trim() || Math.random().toString(36).slice(2,10);
+  const active = draws.find(d=>d.status==='active') || draws[0];
+  if(!active) return alert('No draw');
+  const entries = parts.filter(p=>p.draw_id===active.id && p.status==='confirmed');
+  if(entries.length===0) return alert('No confirmed participants');
+  let acc=0; for(let i=0;i<seed.length;i++) acc = (acc*31 + seed.charCodeAt(i))>>>0;
+  const idx = (acc + Date.now()) % entries.length;
+  const winner = entries[idx];
+  active.winner = { id: winner.id, name: winner.name, phone: winner.phone, seed, at: new Date().toISOString() };
+  alert('Winner: '+winner.name+' • '+winner.phone+'\nSeed: '+seed);
+  render(); if(API) syncServerDraws();
+}
+
+/* Server sync placeholders (implement when API available) */
+async function syncServerDraws(){ if(!API) return; /* implement POST/PUT to API endpoints */ }
+async function syncServerParts(){ if(!API) return; }
+async function syncServerPM(){ if(!API) return; }
+
+load();
+</script>
+</body>
+</html>
